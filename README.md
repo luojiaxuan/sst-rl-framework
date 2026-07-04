@@ -3,6 +3,21 @@
 This is the repo for ACL 2026 paper "Hierarchical Policy Optimization for Simultaneous Translation of Unbounded Speech". 
 It only contains the RL post-training part. For SFT, please refer to [InfiniSST](https://github.com/LeiLiLab/InfiniSST) repo. 
 
+## Code Organization
+
+The RL framework keeps task-specific logic out of the training loop:
+
+- `nemo_rl.posttraining` defines stable posttraining protocols and adapters.
+- `nemo_rl.experience` owns rollout generation, environment stepping, and rollout result facades.
+- `nemo_rl.algorithms` owns GRPO/DPO/SFT optimization logic.
+- `nemo_rl.tasks.infinisst` owns InfiniSST data construction and task setup.
+- `nemo_rl.environments.games.infinisst` remains the compatibility import path for the Ray environment.
+
+Existing configs under `examples/configs/grpo_infinisst_*.yaml` remain supported.
+New configs should prefer inheritance-based recipes such as
+`examples/configs/grpo_infinisst_4b_modular.yaml`, which composes shared GRPO,
+language, and scoring defaults.
+
 ## How to run the HPO training? 
 
 We provide slurm script to run it on 3*8xH100 nodes. 

@@ -1,0 +1,11 @@
+defaults:
+  - infinisst/base_grpo_4b.yaml
+  - infinisst/language/en_zh.yaml
+  - infinisst/scoring/metricx_24.yaml
+
+checkpointing:
+  checkpoint_dir: "/ckpts/infinisst-rl/grpo-4b-metricx-laal_0.5-as-tgtq_-5.0-fix"
+
+logger:
+  wandb:
+    name: grpo-4b-metricx-laal_0.5-as-tgtq_-5.0-fix

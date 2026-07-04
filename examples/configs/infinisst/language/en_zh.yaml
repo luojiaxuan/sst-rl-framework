@@ -1,0 +1,11 @@
+data:
+  train_data_file: "/data/asr/yodas/npy_4b_opt/parakeet-tdt-0.6b-v2_robust60-1120_langid_zh_blaser2.0-qe3.0_metricx-qe4.0_simalign/en000/manifest.parquet"
+  val_data_file: "/data/asr/yodas/npy_4b_opt/parakeet-tdt-0.6b-v2_robust60-1120_langid_zh_blaser2.0-qe3.0_metricx-qe4.0_simalign/en_dev/manifest.parquet"
+  src_lang: "en"
+  tgt_lang: "zh"
+
+env:
+  infinisst:
+    cfg:
+      src_lang: ${data.src_lang}
+      tgt_lang: ${data.tgt_lang}
