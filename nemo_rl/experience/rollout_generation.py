@@ -14,24 +14,12 @@
 
 from nemo_rl.experience.rollout_runner import (
     async_generate_response_for_sample_turn,
-    calculate_rewards,
-    collect_async_multi_turn_rollout,
-    collect_multi_turn_rollout,
     generate_responses,
     generate_responses_async,
-    run_async_multi_turn_rollout,
-    run_multi_turn_rollout,
-    run_sample_multi_turn_rollout,
 )
 
 __all__ = [
     "async_generate_response_for_sample_turn",
-    "calculate_rewards",
-    "collect_async_multi_turn_rollout",
-    "collect_multi_turn_rollout",
     "generate_responses",
     "generate_responses_async",
-    "run_async_multi_turn_rollout",
-    "run_multi_turn_rollout",
-    "run_sample_multi_turn_rollout",
 ]
