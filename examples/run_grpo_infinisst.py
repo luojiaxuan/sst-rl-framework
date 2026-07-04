@@ -13,27 +13,16 @@
 # limitations under the License.
 
 import argparse
-import itertools
 import os
 import pprint
-import random
-from typing import Any, Iterator
-
-import torch
-import numpy as np
-import pandas as pd
 
 from omegaconf import OmegaConf
-from torch.utils.data import IterableDataset
-from transformers import AutoTokenizer
 
-from nemo_rl.distributed.ray_actor_environment_registry import get_actor_python_env
 from nemo_rl.algorithms.grpo import MasterConfig, grpo_train, setup
 from nemo_rl.algorithms.utils import get_tokenizer
-from nemo_rl.data.interfaces import DatumSpec, LLMMessageLogType
 from nemo_rl.distributed.virtual_cluster import init_ray
-from nemo_rl.environments.games.infinisst import InfiniSSTEnv
 from nemo_rl.models.generation import configure_generation_config
+from nemo_rl.tasks.infinisst import setup_infinisst_data
 from nemo_rl.utils.config import load_config, parse_hydra_overrides
 from nemo_rl.utils.logger import get_next_experiment_dir
 
@@ -48,140 +37,6 @@ def parse_args():
     )
     args, overrides = parser.parse_known_args()
     return args, overrides
-
-CODE2LANG = {
-    'zh': 'Chinese',
-    'en': 'English',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'fr': 'French',
-    'de': 'German',
-    'es': 'Spanish',
-}
-
-INSTRUCTION = "Translate the following speech from {} to {}."
-
-class IterableInfiniSSTDataset(IterableDataset):
-    """An IterableDataset that generates sliding puzzle data indefinitely."""
-
-    def __init__(
-        self, tokenizer, data_file, shuffle, seed, src_lang, tgt_lang, task_name, length, multiplier
-    ):
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.df = pd.read_parquet(data_file)
-        self.shuffle = shuffle
-        self.seed = seed
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
-        self.task_name = task_name
-        self.length = length
-        self.multiplier = multiplier
-
-    def __iter__(self) -> Iterator[DatumSpec]:
-        print("Starting IterableInfiniSSTDataset (indefinite generation).")
-        # Use itertools.count for an infinite index generator
-        df = self.df.sample(frac=1, random_state=self.seed) if self.shuffle else self.df
-        for i in itertools.count():
-            row = df.iloc[i % len(df)]
-            data = row.to_dict()
-
-            instruction = INSTRUCTION.format(CODE2LANG[self.src_lang], CODE2LANG[self.tgt_lang])
-
-            message_log = [
-                {
-                    "role": "system",
-                    "content": instruction,
-                    "features": (data['audio_npy_path'], data['audio_npy_row']),
-                },
-                {
-                    "role": "user",
-                    "content": "<|video_pad|>" * data['chunk_frame_size'] * self.multiplier,
-                }
-            ]
-            token_ids = self.tokenizer.apply_chat_template(
-                message_log,
-                return_tensors="pt",
-                add_special_tokens=False,
-                add_generation_prompt=True,
-            )[0]
-
-            system_prompt_end = torch.nonzero(token_ids == self.tokenizer.eos_token_id)[0]
-            message_log[0]['token_ids'] = token_ids[:system_prompt_end + 1]
-            message_log[1]['token_ids'] = token_ids[system_prompt_end + 1:]
-            
-            datum: DatumSpec = {
-                'message_log': message_log,
-                'length': len(token_ids),
-                'extra_env_info': {
-                    'step': 0,
-                    'chunk_frame_size': data['chunk_frame_size'] * self.multiplier,
-                    'src_segments': data['src_segments'],
-                    'tgt_segments': data['tgt_segments'],
-                    'segment_info': data['segment_info'],
-                },
-                'loss_multiplier': 1.0,
-                'idx': i,
-                'task_name': self.task_name,
-            }
-            yield datum
-
-    def __len__(self):
-        return self.length
-
-
-def setup_infinisst_data(
-    tokenizer: AutoTokenizer,
-    env_cfg: dict[str, Any],
-    data_cfg: dict[str, Any],
-    task_name: str,
-    length: int,
-    val_length: int,
-) -> tuple[IterableDataset, IterableDataset | None, dict, dict]:
-    """Sets up the iterable data generator and env map for the sliding puzzle task."""
-    print("Setting up InfiniSST iterable data and environment...")
-    env_config = env_cfg[task_name]
-
-    print(f"Instantiating environment for task '{task_name}'...")
-    env = InfiniSSTEnv.options(
-        runtime_env={
-            "env_vars": dict(os.environ),  # Pass thru all user environment variables
-            "py_executable": get_actor_python_env(
-                "nemo_rl.environments.games.infinisst.InfiniSSTEnv"
-            ),
-        }
-    ).remote(cfg=dict(env_config["cfg"]))
-    task_to_env = {task_name: env}
-    print(f"Environment '{task_name}' created.")
-
-    print("Creating InfiniSST dataset...")
-    training_dataset = IterableInfiniSSTDataset(
-        tokenizer=tokenizer,
-        data_file=data_cfg["train_data_file"],
-        shuffle=data_cfg["train_data_shuffle"],
-        seed=data_cfg["seed"],
-        src_lang=data_cfg["src_lang"],
-        tgt_lang=data_cfg["tgt_lang"],
-        task_name=task_name,
-        length=length,
-        multiplier=data_cfg.get("multiplier", 1),
-    )
-    print("InfiniSST dataset created.")
-
-    validation_dataset = IterableInfiniSSTDataset(
-        tokenizer=tokenizer,
-        data_file=data_cfg["val_data_file"],
-        shuffle=data_cfg["val_data_shuffle"],
-        seed=data_cfg["seed"],
-        src_lang=data_cfg["src_lang"],
-        tgt_lang=data_cfg["tgt_lang"],
-        task_name=task_name,
-        length=val_length,
-        multiplier=data_cfg.get("multiplier", 1),
-    )
-    val_task_to_env = task_to_env
-
-    return training_dataset, validation_dataset, task_to_env, val_task_to_env
 
 
 def main():
