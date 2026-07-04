@@ -5,7 +5,7 @@ It only contains the RL post-training part. For SFT, please refer to [InfiniSST]
 
 ## How to run the HPO training? 
 
-We provide slurm script to run it on 3 8xH100 nodes. 
+We provide slurm script to run it on 3*8xH100 nodes. 
 ```bash
 bash docker_sbatch_3node.sh YAML_NAME 
 ```
