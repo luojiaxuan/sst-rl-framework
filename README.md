@@ -1,49 +1,201 @@
-# Hierarchical GRPO for Simultaneous Translation RL Framework
+# SST RL Framework
 
-This repository is a framework-oriented refactor of HPO-style RL post-training
-for simultaneous speech translation, built upon "Hierarchical Policy
-Optimization for Simultaneous Translation of Unbounded Speech" (ACL 2026,
-[arXiv:2604.21045](https://arxiv.org/pdf/2604.21045)).
+Reusable GRPO post-training infrastructure for simultaneous speech translation
+and other speech-domain RL tasks.
 
-It focuses on reusable RL infrastructure rather than SFT. For SFT, please refer
-to the [InfiniSST](https://github.com/LeiLiLab/InfiniSST) repo.
+This repository is a framework-oriented refactor built upon the HPO-style
+simultaneous translation RL code path from "Hierarchical Policy Optimization for
+Simultaneous Translation of Unbounded Speech" (ACL 2026,
+[arXiv:2604.21045](https://arxiv.org/pdf/2604.21045)). The paper is cited as
+the method and environment foundation; this repository focuses on refactoring
+that paper-specific RL path into a cleaner, reusable framework for future
+speech research.
 
-## Code Organization
+For SFT and the original InfiniSST data/model pipeline, refer to
+[InfiniSST](https://github.com/LeiLiLab/InfiniSST). This repository focuses on
+RL post-training.
 
-The RL framework keeps task-specific logic out of the training loop:
+## What This Repo Provides
 
-- `nemo_rl.posttraining` defines stable posttraining protocols and adapters.
-- `nemo_rl.posttraining.PostTrainingTaskSpec` describes reusable task plugins.
-- `nemo_rl.experience` owns rollout generation, environment stepping, and rollout result facades.
-- `nemo_rl.algorithms` owns GRPO/DPO/SFT optimization logic.
-- `nemo_rl.tasks.infinisst` owns InfiniSST data construction and task setup.
-- `nemo_rl.environments.games.infinisst` remains the compatibility import path for the Ray environment.
+- A reusable GRPO post-training stack for speech tasks.
+- Stable protocols for rollout, environment stepping, rewards, and task plugins.
+- Backward-compatible HPO/InfiniSST training entrypoints.
+- A modular InfiniSST task plugin that can be used as a template for new tasks.
+- Config inheritance for shared GRPO, language, and reward-model settings.
 
-Existing configs under `examples/configs/grpo_infinisst_*.yaml` remain supported.
-New configs should prefer inheritance-based recipes such as
-`examples/configs/grpo_infinisst_4b_modular.yaml`, which composes shared GRPO,
-language, and scoring defaults.
+## Why This Refactor Exists
 
-## How to run the HPO training? 
+The original RL code path was tightly coupled to one simultaneous translation
+environment. That made it hard to reuse the infrastructure for nearby speech RL
+work such as retrieval-aware SST, speech agents, streaming ASR correction, or
+task-specific reward-model experiments.
 
-We provide slurm script to run it on 3*8xH100 nodes. 
-```bash
-bash docker_sbatch_3node.sh YAML_NAME 
+This refactor separates the framework from the task:
+
+- The framework owns rollout collection, environment calls, reward aggregation,
+  GRPO optimization, logging, and checkpointing.
+- Task plugins own data construction, task metadata, Ray environment setup, and
+  domain-specific reward dependencies.
+
+The result is still compatible with existing InfiniSST/HPO configs, but new
+speech RL tasks should plug into the framework through task specs instead of
+editing the GRPO trainer directly.
+
+## Architecture
+
+| Layer | Package | Responsibility |
+| --- | --- | --- |
+| Task API | `nemo_rl.posttraining` | Typed protocols, environment adapters, `PostTrainingTaskSpec`, task registry |
+| Rollouts | `nemo_rl.experience` | Generation, environment stepping, sync/async rollout runners, rollout metrics |
+| Algorithms | `nemo_rl.algorithms` | GRPO, DPO, SFT, losses, advantage/reward processing |
+| Task plugins | `nemo_rl.tasks` | Dataset builders, task setup, task specs |
+| Compatibility envs | `nemo_rl.environments` | Ray environments and legacy import paths |
+| Recipes | `examples/configs` | Composable experiment configs and legacy configs |
+
+Key extension points:
+
+- `EnvStepResult`: normalized environment output with rewards, termination flags,
+  stop strings, and metrics.
+- `RolloutResult`: structured rollout result for new code while legacy rollout
+  functions still return `(batch, metrics)`.
+- `PostTrainingTaskSpec`: framework-level description of a reusable RL task.
+- `TaskSetupResult`: datasets and environment maps consumed by algorithms.
+
+## Current Task Plugin: InfiniSST
+
+The first task plugin is `nemo_rl.tasks.infinisst`.
+
+It contains:
+
+- `data.py`: InfiniSST datum and iterable dataset construction.
+- `setup.py`: Ray actor and dataset setup.
+- `task.py`: `INFINISST_TASK_SPEC`, the reusable framework task spec.
+
+The old environment import remains available:
+
+```python
+from nemo_rl.environments.games.infinisst import InfiniSSTEnv
 ```
-You can find the following yaml files under [examples/configs](examples/configs)
 
-For En-Zh
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0 (multiplier=1)
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0_m{2...6} (multiplier=2...6)
+New framework code should prefer:
 
-For En-De
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0_de (multiplier=1)
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0_de_m{2...6} (multiplier=2...6)
+```python
+from nemo_rl.tasks.infinisst import build_infinisst_task_spec
 
-For En-Ja
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0_ja (multiplier=1)
-- grpo_infinisst_4b_laal0.5_as_tgtq-5.0_ja_m{2...6} (multiplier=2...6)
+task = build_infinisst_task_spec()
+setup_result = task.setup_data(
+    tokenizer=tokenizer,
+    env_cfg=config["env"],
+    data_cfg=config["data"],
+    task_name=task.name,
+    length=train_length,
+    val_length=val_length,
+)
+```
 
-Running this requires the SFT model checkpoint, the speech data pre-encoded into features with the speech encoder, and a docker container. 
+## Quick Start
 
-We provide the example SFT checkpoint for en-zh [[here](https://drive.google.com/file/d/1m2Dd-hBqlFFSbAzVvaKuRYHK1om-DcJv/view?usp=sharing)], and the example pre-encoded data [[manifest](https://drive.google.com/file/d/1SonY83rcRP8TyugRacmrbzTMi5biC7et/view?usp=sharing)] [[encoded feature](https://drive.google.com/file/d/1L4QYMuFaQnCoYUqnq4PhL7X_wH2ecfZT/view?usp=sharing)] and the docker image [[here](https://drive.google.com/file/d/1xI7rT4pCuvNaA5rIFMUuuzUn4oeVgQxb/view?usp=sharing)]. 
+Use the project container or an environment with the repo dependencies installed.
+The local lightweight framework modules can import without `torch` or `ray`, but
+training requires the full RL stack.
+
+Install dependencies:
+
+```bash
+uv sync --extra infinisst
+```
+
+Run focused framework tests:
+
+```bash
+uv run pytest \
+  tests/unit/posttraining \
+  tests/unit/tasks/infinisst \
+  tests/unit/algorithms/test_grpo_components.py
+```
+
+Run InfiniSST GRPO locally inside a prepared container:
+
+```bash
+uv run python examples/run_grpo_infinisst.py \
+  --config examples/configs/grpo_infinisst_4b_modular.yaml
+```
+
+Run through the legacy Slurm launcher:
+
+```bash
+bash docker_sbatch_3node.sh grpo_infinisst_4b_modular
+```
+
+The modular recipe composes:
+
+- `examples/configs/infinisst/base_grpo_4b.yaml`
+- `examples/configs/infinisst/language/en_zh.yaml`
+- `examples/configs/infinisst/scoring/metricx_24.yaml`
+
+Legacy configs under `examples/configs/grpo_infinisst_*.yaml` remain supported.
+
+## Adding A New Speech RL Task
+
+Create a package under `nemo_rl/tasks/<task_name>/`:
+
+```text
+nemo_rl/tasks/<task_name>/
+  __init__.py
+  data.py
+  setup.py
+  task.py
+```
+
+Implement:
+
+- `data.py`: build training/validation examples and task metadata.
+- `setup.py`: create datasets and Ray environments.
+- `task.py`: expose a `PostTrainingTaskSpec`.
+
+Then add a config group:
+
+```text
+examples/configs/<task_name>/
+  base.yaml
+  reward/<reward_backend>.yaml
+  language/<language_pair>.yaml
+```
+
+The task should be usable by GRPO without modifying
+`nemo_rl.algorithms.grpo`.
+
+## Compatibility Guarantees
+
+The refactor keeps these existing entrypoints available:
+
+- `examples/run_grpo_infinisst.py --config ...`
+- `nemo_rl.algorithms.grpo.setup`
+- `nemo_rl.algorithms.grpo.grpo_train`
+- `nemo_rl.experience.rollouts.run_multi_turn_rollout`
+- `nemo_rl.experience.rollouts.run_async_multi_turn_rollout`
+- `nemo_rl.environments.games.infinisst.InfiniSSTEnv`
+
+This lets old experiments continue to run while new code moves toward the task
+plugin API.
+
+## Development Notes
+
+- Keep task dependencies lazy-loaded where possible so framework modules remain
+  lightweight.
+- Keep reusable task logic in `nemo_rl.tasks`, not in `examples/`.
+- Keep algorithm changes in `nemo_rl.algorithms`, not inside task environments.
+- Use modular configs for new experiments.
+- Use `docs/design-docs/rl-posttraining-framework.md` as the design reference.
+
+Recommended checks before pushing:
+
+```bash
+python3 -m py_compile \
+  nemo_rl/posttraining/protocol.py \
+  nemo_rl/posttraining/task.py \
+  nemo_rl/tasks/infinisst/task.py \
+  examples/run_grpo_infinisst.py
+
+git diff --check
+```
