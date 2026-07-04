@@ -62,5 +62,6 @@ design-docs/chat-datasets.md
 design-docs/generation.md
 design-docs/checkpointing.md
 design-docs/loss-functions.md
+design-docs/rl-posttraining-framework.md
 design-docs/fsdp2-parallel-plan.md
 ```

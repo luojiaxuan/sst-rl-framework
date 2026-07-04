@@ -22,7 +22,7 @@ from nemo_rl.algorithms.grpo import MasterConfig, grpo_train, setup
 from nemo_rl.algorithms.utils import get_tokenizer
 from nemo_rl.distributed.virtual_cluster import init_ray
 from nemo_rl.models.generation import configure_generation_config
-from nemo_rl.tasks.infinisst import setup_infinisst_data
+from nemo_rl.tasks.infinisst import build_infinisst_task_spec
 from nemo_rl.utils.config import load_config, parse_hydra_overrides
 from nemo_rl.utils.logger import get_next_experiment_dir
 
@@ -87,14 +87,19 @@ def main():
         * config["grpo"]["num_generations_per_prompt"]
         * config["grpo"]["max_num_steps"]
     )
-    dataset, val_dataset, task_to_env, val_task_to_env = setup_infinisst_data(
+    infinisst_task = build_infinisst_task_spec()
+    task_setup = infinisst_task.setup_data(
         tokenizer=tokenizer,
         env_cfg=config["env"],
         data_cfg=config["data"],
-        task_name="infinisst",
+        task_name=infinisst_task.name,
         length=ds_length,
         val_length=config["grpo"]["max_val_samples"],
     )
+    dataset = task_setup.train_dataset
+    val_dataset = task_setup.val_dataset
+    task_to_env = task_setup.task_to_env
+    val_task_to_env = task_setup.val_task_to_env
 
     (
         policy,

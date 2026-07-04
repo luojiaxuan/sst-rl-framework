@@ -14,14 +14,10 @@
 
 from typing import Any
 
-from torch.utils.data import IterableDataset
-from transformers import PreTrainedTokenizerBase
-
-from nemo_rl.distributed.ray_actor_environment_registry import get_actor_python_env
-from nemo_rl.tasks.infinisst.data import IterableInfiniSSTDataset
-
 
 def _build_infinisst_actor_runtime_env(env_config: dict[str, Any]) -> dict[str, Any]:
+    from nemo_rl.distributed.ray_actor_environment_registry import get_actor_python_env
+
     runtime_env = dict(env_config.get("actor_runtime_env", {}))
     runtime_env.setdefault(
         "py_executable",
@@ -31,14 +27,15 @@ def _build_infinisst_actor_runtime_env(env_config: dict[str, Any]) -> dict[str, 
 
 
 def setup_infinisst_data(
-    tokenizer: PreTrainedTokenizerBase,
+    tokenizer: Any,
     env_cfg: dict[str, Any],
     data_cfg: dict[str, Any],
     task_name: str,
     length: int,
     val_length: int,
-) -> tuple[IterableDataset, IterableDataset | None, dict, dict]:
+) -> tuple[Any, Any | None, dict, dict]:
     from nemo_rl.environments.games.infinisst import InfiniSSTEnv
+    from nemo_rl.tasks.infinisst.data import IterableInfiniSSTDataset
 
     print("Setting up InfiniSST data and environment.")
     env_config = env_cfg[task_name]

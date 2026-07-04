@@ -1,13 +1,19 @@
-# Hierarchical Policy Optimization for Simultaneous Translation of Unbounded Speech
+# Hierarchical GRPO for Simultaneous Translation RL Framework
 
-This is the repo for ACL 2026 paper "Hierarchical Policy Optimization for Simultaneous Translation of Unbounded Speech". 
-It only contains the RL post-training part. For SFT, please refer to [InfiniSST](https://github.com/LeiLiLab/InfiniSST) repo. 
+This repository is a framework-oriented refactor of HPO-style RL post-training
+for simultaneous speech translation, built upon "Hierarchical Policy
+Optimization for Simultaneous Translation of Unbounded Speech" (ACL 2026,
+[arXiv:2604.21045](https://arxiv.org/pdf/2604.21045)).
+
+It focuses on reusable RL infrastructure rather than SFT. For SFT, please refer
+to the [InfiniSST](https://github.com/LeiLiLab/InfiniSST) repo.
 
 ## Code Organization
 
 The RL framework keeps task-specific logic out of the training loop:
 
 - `nemo_rl.posttraining` defines stable posttraining protocols and adapters.
+- `nemo_rl.posttraining.PostTrainingTaskSpec` describes reusable task plugins.
 - `nemo_rl.experience` owns rollout generation, environment stepping, and rollout result facades.
 - `nemo_rl.algorithms` owns GRPO/DPO/SFT optimization logic.
 - `nemo_rl.tasks.infinisst` owns InfiniSST data construction and task setup.

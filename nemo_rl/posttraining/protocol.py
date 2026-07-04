@@ -15,11 +15,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Protocol, TypedDict
 
-import torch
+if TYPE_CHECKING:
+    from nemo_rl.distributed.batched_data_dict import BatchedDataDict
 
-from nemo_rl.distributed.batched_data_dict import BatchedDataDict
+
+def _torch_module():
+    import torch
+
+    return torch
 
 
 class Message(TypedDict, total=False):
@@ -95,13 +100,15 @@ class TaskEnvironment(Protocol):
         raise NotImplementedError
 
 
-def _as_tensor(value: Any, dtype: torch.dtype) -> torch.Tensor:
+def _as_tensor(value: Any, dtype: Any) -> Any:
+    torch = _torch_module()
     if torch.is_tensor(value):
         return value.detach().cpu().to(dtype=dtype)
     return torch.tensor(value, dtype=dtype)
 
 
 def _metric_scalar(value: Any, index: int) -> float | int:
+    torch = _torch_module()
     if torch.is_tensor(value):
         value = value.detach().cpu().tolist()
     if isinstance(value, (list, tuple)):
@@ -110,6 +117,7 @@ def _metric_scalar(value: Any, index: int) -> float | int:
 
 
 def _normalize_metrics(metrics: Any, batch_size: int) -> dict[str, list[float | int]]:
+    torch = _torch_module()
     if metrics is None:
         return {}
     if isinstance(metrics, Mapping):
@@ -173,6 +181,7 @@ def _fields_from_result(result: Any) -> tuple[Any, Any, Any, Any, Any, Any]:
 def normalize_env_step_result(
     result: Any, batch_size: int | None = None
 ) -> EnvStepResult:
+    torch = _torch_module()
     observations, metadata, next_stop_strings, rewards, terminateds, metrics = (
         _fields_from_result(result)
     )
