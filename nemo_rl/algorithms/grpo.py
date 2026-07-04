@@ -22,12 +22,12 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from transformers import PreTrainedTokenizerBase
 
 from nemo_rl.algorithms.interfaces import LossFunction
+from nemo_rl.algorithms.grpo_components import compute_grpo_advantages
 from nemo_rl.algorithms.loss_functions import (
     ClippedPGLossConfig,
     ClippedPGLossDataDict,
     ClippedPGLossFn,
 )
-from nemo_rl.algorithms.utils import calculate_baseline_and_std_per_prompt
 from nemo_rl.data import DataConfig
 from nemo_rl.data.datasets import AllTaskProcessedDataset, rl_collate_fn
 from nemo_rl.data.interfaces import (
@@ -594,27 +594,18 @@ def grpo_train(
                 rewards = repeated_batch["total_reward"]
 
                 print("▶ Computing advantages...")
-                # breakpoint()
-                baseline, std = calculate_baseline_and_std_per_prompt(
-                    input_features,
-                    rewards,
-                    torch.ones_like(rewards),
-                    leave_one_out_baseline=master_config["grpo"][
+                advantage_output = compute_grpo_advantages(
+                    input_features=input_features,
+                    rewards=rewards,
+                    use_leave_one_out_baseline=master_config["grpo"][
                         "use_leave_one_out_baseline"
                     ],
+                    reduce_baseline_rewards=master_config["grpo"][
+                        "reduce_baseline_rewards"
+                    ],
+                    normalize_rewards=master_config["grpo"]["normalize_rewards"],
                 )
-
-                if master_config["grpo"]["reduce_baseline_rewards"]:
-                    advantages = (rewards - baseline).unsqueeze(-1)
-                else:
-                    advantages = rewards.unsqueeze(-1)
-
-                if master_config["grpo"]["normalize_rewards"]:
-                    # don't sharpen the ones with no variation
-                    zero_std_mask = std > 0
-                    advantages[zero_std_mask] = (
-                        advantages[zero_std_mask] / std.unsqueeze(-1)[zero_std_mask]
-                    )
+                advantages = advantage_output.advantages
 
             with timer.time("data_processing"):
                 # Add loss mask and advantages to each message in LLMMessageLogType
