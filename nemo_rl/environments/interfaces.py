@@ -42,7 +42,10 @@ class EnvironmentReturn(NamedTuple):
     next_stop_strings: list[list[str] | None] | list[None]
     rewards: Tensor
     terminateds: Tensor
-    metrics: list[dict[str, list[float | int]]]
+    metrics: (
+        dict[str, list[float | int]] | list[dict[str, list[float | int]]] | None
+    ) = None
+
 
 class EnvironmentInterface(abc.ABC):
     @abc.abstractmethod

@@ -43,6 +43,7 @@ from nemo_rl.models.generation.interfaces import (
     GenerationInterface,
     GenerationOutputSpec,
 )
+from nemo_rl.posttraining.protocol import normalize_env_step_result
 
 TokenizerType = PreTrainedTokenizerBase
 
@@ -269,22 +270,17 @@ def calculate_rewards(
 
     for future, result in zip(futures, results):
         indices = future_to_indices[future]
-        # Environment step returns: EnvironmentReturn
-        env_observations, metadata, next_stop_strings, task_rewards, terminateds, metrics = (
-            result
-        )
-        if next_stop_strings is None:
-            next_stop_strings = [None] * len(task_rewards)
+        env_result = normalize_env_step_result(result, batch_size=len(indices))
 
         # Store results with their original indices
         for i, idx in enumerate(indices):
             all_indices_order.append(idx)
-            all_rewards.append(task_rewards[i])
-            all_env_observations.append(env_observations[i])
-            all_terminateds.append(terminateds[i])
-            all_next_stop_strings.append(next_stop_strings[i])
-            all_metadata.append(metadata[i])
-            for metric_name, metric_values in metrics.items():
+            all_rewards.append(env_result.rewards[i])
+            all_env_observations.append(env_result.observations[i])
+            all_terminateds.append(env_result.terminateds[i])
+            all_next_stop_strings.append(env_result.next_stop_strings[i])
+            all_metadata.append(env_result.metadata[i])
+            for metric_name, metric_values in env_result.metrics.items():
                 if metric_name not in all_metrics:
                     all_metrics[metric_name] = []
                 all_metrics[metric_name].append(metric_values[i])
